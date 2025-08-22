@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Sign Up</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="css/style.css" />
 
   <link rel="apple-touch-icon" sizes="180x180" href="Asset/favicon_io/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="Asset/favicon_io/favicon-32x32.png">
@@ -13,61 +13,73 @@
 
   <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-  
 </head>
 <body>
   <div class="container">
     <h2>Sign Up to PaySafe AI</h2>
     <h2>Welcome</h2>
-    <form>
-      <input type="text" placeholder="Full Name" required />
-      <input type="email" placeholder="Email" required />
-      <input type="password" placeholder="Password" required />
-      <input type="password" placeholder="Confirm Password" required />
+
+    <form id="signupForm">
+      <input type="text" id="name" placeholder="Full Name" required />
+      <input type="email" id="email" placeholder="Email" required />
+      <input type="password" id="password" placeholder="Password" required />
+      <input type="password" id="confirmPassword" placeholder="Confirm Password" required />
       <button type="submit">Sign Up</button>
     </form>
 
     <div class="separator">or</div>
 
     <!-- Google Sign-In Button -->
-    <div id="g_id_onload"
-         data-client_id="1063747087816-t9d0pbqck6abci04o9sqfim0fkhjck6g.apps.googleusercontent.com"
-         data-context="signup"
-         data-ux_mode="popup"
-         data-callback="handleCredentialResponse"
-         data-auto_prompt="false">
-    </div>
+<div id="g_id_onload"
+     data-client_id="894697738919-vvodvav6j86kldqopr0pls2jpn07kdor.apps.googleusercontent.com"
+     data-context="signup"
+     data-ux_mode="popup"
+     data-callback="handleCredentialResponse"
+     data-auto_prompt="false">
+</div>
 
-    <div class="g_id_signin"
-         data-type="standard"
-         data-shape="rectangular"
-         data-theme="outline"
-         data-text="signup_with"
-         data-size="large"
-         data-logo_alignment="left">
-    </div>
+<div class="g_id_signin"
+     data-type="standard"
+     data-shape="rectangular"
+     data-theme="outline"
+     data-text="signup_with"
+     data-size="large"
+     data-logo_alignment="left">
+</div> 
+<script>
+  const form = document.getElementById("signupForm");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
 
-    <div class="toggle">
-      Already have an account? <a href="login.html">Login</a>
-    </div>
-  </div>
+    const name = form.name.value;
+    const email = form.email.value;
+    const password = form.password.value;
 
-  <script>
-    function handleCredentialResponse(response) {
-      console.log("Google ID token:", response.credential);
-      // You can decode the token using jwt.io or send to your backend here
-    }
-
-    window.onload = function () {
-      google.accounts.id.initialize({
-        client_id: "1063747087816-t9d0pbqck6abci04o9sqfim0fkhjck6g.apps.googleusercontent.com",
-        callback: handleCredentialResponse
+    try {
+      const res = await fetch("http://localhost:5000/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password })
       });
-      google.accounts.id.renderButton(
-        document.querySelector(".g_id_signin"),
-        { theme: "outline", size: "large" }
-      );
-    };
-  </script>
+
+      const data = await res.json();
+      console.log(data);
+
+      if (res.status === 201) {
+        // Signup successful → redirect to login page
+        alert("Signup successful!");
+        window.location.href = "login.html"; 
+      } else {
+        // Signup failed → show error
+        alert(data.message);
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Something went wrong. Please try again.");
+    }
+  });
+</script>
+
+
 </body>
 </html>
