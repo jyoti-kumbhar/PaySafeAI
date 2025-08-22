@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Login</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="css/style.css" />
 
   <link rel="apple-touch-icon" sizes="180x180" href="Asset/favicon_io/apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="32x32" href="Asset/favicon_io/favicon-32x32.png">
@@ -19,18 +19,19 @@
   <div class="container">
     <h2>Login to PaySafe AI</h2>
     <h2>Welcome</h2>
-    <form>
-      <input type="email" placeholder="Email" required />
-      <input type="password" placeholder="Password" required />
+    <form id="loginForm">
+  <input type="email" id="email" name="email" placeholder="Email" required />
+  <input type="password" id="password" name="password" placeholder="Password" required />
 
-      <div class="forgot">
-        <a href="forgot-password.html">Forgot Password?</a>
-      </div>
+  <div class="forgot">
+    <a href="forgot-password.html">Forgot Password?</a>
+  </div>
 
-      <br>
-      
-      <button type="submit">Login</button>
-    </form>
+  <br>
+  
+  <button type="submit">Login</button>
+</form>
+
 
     <div class="separator">or</div>
     <!-- Google Sign-In Button -->
@@ -57,21 +58,38 @@
   </div>
   
   <script>
-    function handleCredentialResponse(response) {
-      console.log("Google ID token:", response.credential);
-      // You can decode the token using jwt.io or send to your backend here
-    }
+document.getElementById("loginForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
 
-    window.onload = function () {
-      google.accounts.id.initialize({
-        client_id: "1063747087816-t9d0pbqck6abci04o9sqfim0fkhjck6g.apps.googleusercontent.com",
-        callback: handleCredentialResponse
-      });
-      google.accounts.id.renderButton(
-        document.querySelector(".g_id_signin"),
-        { theme: "outline", size: "large" }
-      );
-    };
-  </script>
+  const email = document.getElementById("email").value;
+  const password = document.getElementById("password").value;
+
+  try {
+    const res = await fetch("http://localhost:5000/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password })
+    });
+
+    const data = await res.json();
+
+    if (res.ok) {
+      // Role-based redirect
+      if (email === "admin@gmail.com" && password === "admin123") {
+        window.location.href = "index_admin.html";
+      } else {
+        window.location.href = "index_user.html";
+      }
+    } else {
+      alert(data.message);
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Something went wrong. Please try again.");
+  }
+});
+
+</script>
+
 </body>
 </html>
