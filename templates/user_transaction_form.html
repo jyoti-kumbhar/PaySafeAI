@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fraud Detection</title>
+ <link rel="stylesheet" href="{{ url_for('static', filename='css/style_transaction_form.css') }}">
+
+  <!-- Favicon -->
+<link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='Asset/favicon_io/apple-touch-icon.png') }}">
+<link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='Asset/favicon_io/favicon-32x32.png') }}">
+<link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='Asset/favicon_io/favicon-16x16.png') }}">
+<link rel="manifest" href="{{ url_for('static', filename='Asset/favicon_io/site.webmanifest') }}">
+
+
+</head>
+<body>
+   <a href="user_history.html" class="history-btn">History</a>
+  <div class="form-card">
+    <h2>Fraud Detection</h2>
+    <form id="transactionForm">
+      <div>
+        <label>Amount</label>
+        <input type="number" step="0.01" id="amount" required>
+      </div>
+
+      <div>
+        <label>Customer Age</label>
+        <input type="number" id="customer_age" required>
+      </div>
+
+      <div>
+        <label>Income</label>
+        <input type="number" id="income" required>
+      </div>
+
+      <div>
+        <label>Payment Type</label>
+        <select id="payment_type" name="payment_type">
+  <option value="UPI">UPI</option>
+  <option value="Credit Card">Credit Card</option>
+  <option value="Debit Card">Debit Card</option>
+</select>
+      </div>
+
+      <div>
+        <label>Device OS</label>
+        <select id="device_os" required>
+          <option value="android">Android</option>
+          <option value="windows">Windows</option>
+          <option value="ios">iOS</option>
+          <option value="linux">Linux</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Session Length (minutes)</label>
+        <input type="number" step="0.1" id="session_length_in_minutes" required>
+      </div>
+      
+      <button type="submit">Check Transaction</button>
+      <div id="result"></div>
+    </form>
+  </div>
+
+<script>
+  const form = document.getElementById("transactionForm");
+  const resultDiv = document.getElementById("result");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const transactionData = {
+      intended_balcon_amount: parseFloat(document.getElementById("amount").value),
+      customer_age: parseInt(document.getElementById("customer_age").value),
+      income: parseFloat(document.getElementById("income").value),
+      payment_type: document.getElementById("payment_type").value,
+      device_os: document.getElementById("device_os").value,
+      session_length_in_minutes: parseFloat(document.getElementById("session_length_in_minutes").value),
+    };
+
+    resultDiv.innerText = "Checking transaction...";
+
+    try {
+      const res = await fetch("/api/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(transactionData)
+      });
+
+      if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+
+      const data = await res.json();
+
+      if (!data || !data.prediction) throw new Error("Invalid response from server");
+
+      resultDiv.innerText =
+        data.prediction === "Fraud"
+          ? " Fraudulent Transaction Detected!"
+          : " Safe Transaction";
+
+    } catch (error) {
+      console.error(error);
+      resultDiv.innerText = "Error checking transaction. Please try again.";
+    }
+  });
+</script>
+</body>
+</html>
