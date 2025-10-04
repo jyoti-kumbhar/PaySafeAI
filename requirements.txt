@@ -1,0 +1,10 @@
+flask
+pandas
+scikit-learn
+joblib
+pymongo
+certifi
+numpy
+python-dotenv
+Werkzeug
+gunicorn
