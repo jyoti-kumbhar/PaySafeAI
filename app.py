@@ -4,13 +4,14 @@ import pandas as pd
 from pymongo import MongoClient
 from werkzeug.security import generate_password_hash, check_password_hash
 import certifi
-from predict import predict_transaction  
+import numpy as np
+from bson import ObjectId
 
 # -----------------------------
 # Flask setup
 # -----------------------------
 app = Flask(__name__)
-app.secret_key = "yoursecretkey"  # Needed for sessions
+app.secret_key = "yoursecretkey"
 
 # -----------------------------
 # MongoDB Atlas connection
@@ -20,11 +21,6 @@ client = MongoClient(MONGO_URI, tlsCAFile=certifi.where())
 db = client["PaySafeAI"]
 users_col = db["users"]
 history_col = db["history"]
-
-# -----------------------------
-# Load ML model
-# -----------------------------
-model = joblib.load("fraud_model.pkl")
 
 # -----------------------------
 # Page Routes
@@ -51,7 +47,6 @@ def index_user():
 def index_admin():
     if "user" not in session:
         return redirect(url_for("login_page"))
-    # only allow if role is admin
     if session.get("role") != "admin":
         return redirect(url_for("index_user"))
     return render_template("index_admin.html")
@@ -66,7 +61,7 @@ def user_profile():
 def user_history():
     if "user" not in session:
         return redirect(url_for("login_page"))
-    return render_template("user_history.html")
+    return render_template("user_history.html", logged_in_user=session["user"])
 
 @app.route("/user_transaction_form.html")
 def user_transaction_form():
@@ -89,22 +84,41 @@ def admin_dashboard():
 # -----------------------------
 # API Routes
 # -----------------------------
+from test_final import hybrid_predict
+
 @app.route("/api/predict", methods=["POST"])
-def api_predict():
+def predict():
     if "user" not in session:
         return jsonify({"error": "Unauthorized"}), 401
 
-    data = request.json
     try:
-        result = predict_transaction(data)
+        data = request.json or {}
+        prediction, ml_prob, rule_score, method, risk_factors, safety_prob = hybrid_predict(data)
+        result = "Fraud" if prediction == 1 else "Safe"
+
+        history_col.insert_one({
+            "username": session["user"],
+            **data,
+            "prediction": result,
+            "ml_probability": float(ml_prob),
+            "rule_score": int(rule_score),
+            "method": method,
+            "safety_probability": float(safety_prob)
+        })
+
+        return jsonify({
+            "prediction": result,
+            "probability": float(ml_prob),
+            "safety_probability": float(safety_prob),
+            "rule_score": int(rule_score),
+            "method": method,
+            "risk_factors": risk_factors
+        })
+
     except Exception as e:
-        print("Prediction error:", e)
+        import traceback
+        traceback.print_exc()
         return jsonify({"error": "Prediction failed"}), 500
-
-    # Save to history
-    history_col.insert_one({"username": session["user"], **data, "prediction": result})
-
-    return jsonify({"prediction": result})
 
 @app.route("/api/signup", methods=["POST"])
 def signup():
@@ -117,7 +131,6 @@ def signup():
         return jsonify({"error": "User already exists"}), 400
 
     hashed_pw = generate_password_hash(password)
-    # ✅ Always store role as "user"
     users_col.insert_one({
         "name": name,
         "email": email,
@@ -135,8 +148,7 @@ def login():
     user = users_col.find_one({"email": email})
     if user and check_password_hash(user["password"], password):
         session["user"] = email
-        session["role"] = user.get("role", "user")  # ✅ default fallback
-
+        session["role"] = user.get("role", "user")
         return jsonify({
             "message": "Login successful",
             "user": {"email": user["email"], "role": session["role"]}
@@ -168,24 +180,31 @@ def user_profile_api(email):
         session["user"] = update_data["email"]
         return jsonify({"user": update_data})
 
-@app.route("/api/predict", methods=["POST"])
-def predict():
-    if "user" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    df = pd.DataFrame([request.json])
-    result = model.predict(df)[0]
-
-    history_col.insert_one({"username": session["user"], **request.json, "prediction": str(result)})
-    return jsonify({"prediction": str(result)})
-
+# -----------------------------
+# Fixed: Include _id as string
+# -----------------------------
 @app.route("/api/history", methods=["GET"])
 def history():
     if "user" not in session:
         return jsonify({"error": "Unauthorized"}), 401
 
-    records = list(history_col.find({"username": session["user"]}, {"_id": 0}))
+    records = list(history_col.find({"username": session["user"]}))
+    for rec in records:
+        rec["_id"] = str(rec["_id"])
     return jsonify(records)
+
+@app.route("/api/history/<id>", methods=["DELETE"])
+def delete_transaction(id):
+    if "user" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    try:
+        result = history_col.delete_one({"_id": ObjectId(id), "username": session["user"]})
+        if result.deleted_count == 0:
+            return jsonify({"error": "Transaction not found or not allowed"}), 404
+        return jsonify({"message": "Transaction deleted"})
+    except:
+        return jsonify({"error": "Invalid transaction ID"}), 400
 
 @app.route("/api/logout", methods=["POST"])
 def logout():
@@ -201,19 +220,18 @@ def get_all_users():
     if "user" not in session or session.get("role") != "admin":
         return jsonify({"error": "Unauthorized"}), 401
 
-    users = list(users_col.find({}, {"_id": {"$toString": "$_id"}, "name": 1, "email": 1, "role": 1}))
+    users = list(users_col.find({}, {"name": 1, "email": 1, "role": 1}))
+    for u in users:
+        u["_id"] = str(u["_id"])
     return jsonify(users)
-
 
 @app.route("/api/admin/users/<id>", methods=["DELETE"])
 def delete_user(id):
     if "user" not in session or session.get("role") != "admin":
         return jsonify({"error": "Unauthorized"}), 401
 
-    from bson import ObjectId
     users_col.delete_one({"_id": ObjectId(id)})
     return jsonify({"message": "User deleted"})
-
 
 @app.route("/api/admin/dashboard", methods=["GET"])
 def admin_dashboard_api():
@@ -221,14 +239,16 @@ def admin_dashboard_api():
         return jsonify({"error": "Unauthorized"}), 401
 
     total_tx = history_col.count_documents({})
-    fraud_tx = history_col.count_documents({"prediction": "1"})   # assuming fraud = "1"
-    safe_tx = history_col.count_documents({"prediction": "0"})    # assuming safe = "0"
+    fraud_tx = history_col.count_documents({"prediction": "Fraud"})
+    safe_tx = history_col.count_documents({"prediction": "Safe"})
+    total_users = users_col.count_documents({})
 
     return jsonify({
         "total": total_tx,
         "frauds": fraud_tx,
         "safe": safe_tx,
-        "model_version": "v1.0"   # static for now
+        "users": total_users,
+        "model_version": "v1.0"
     })
 
 # -----------------------------
